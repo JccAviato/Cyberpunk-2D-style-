@@ -76,6 +76,7 @@ ZONE_SKIES = {
     "nebula_reliquary": (18, 20, 52),
     "tesseract_workshop": (16, 14, 46),
     "processional_way": (12, 8, 30),
+    "singularity_throne": (24, 10, 52),
 }
 
 BOSS_ACHIEVEMENTS = {
@@ -108,6 +109,7 @@ BOSS_ACHIEVEMENTS = {
     "Reliquary Seraph": "reliquary_seraph",
     "Tensor Artificer": "tensor_artificer",
     "Procession Warden": "procession_warden",
+    "Singularity Crown": "singularity_crown",
 }
 
 # ---------------------------------------------------------------------------
@@ -253,6 +255,8 @@ class Portal:
     target_spawn: Tuple[int, int]
     requirement: Optional[str] = None
     label: str = ""
+    required_flag: Optional[str] = None
+    forbidden_flag: Optional[str] = None
 
 
 @dataclass
@@ -3004,6 +3008,14 @@ def build_zones() -> Dict[str, Zone]:
         portals=[
             Portal(pygame.Rect(20, 320, 80, 160), "oblivion_grid", (620, 360), None, "Return to Grid"),
             Portal(pygame.Rect(360, 120, 80, 120), "kernel_nexus", (360, 360), None, "Nexus Shortcut"),
+            Portal(
+                pygame.Rect(360, 60, 80, 140),
+                "singularity_throne",
+                (160, 520),
+                "overclock",
+                "Singularity Throne",
+                required_flag="prime_judgement_recorded",
+            ),
             Portal(pygame.Rect(740, 300, 50, 150), "fractal_bastion", (140, 520), "overclock", "Fractal Bastion"),
             Portal(pygame.Rect(360, 520, 80, 80), "cradle_of_resolve", (200, 500), "cradle_access", "Cradle of Resolve"),
             Portal(pygame.Rect(600, 160, 80, 120), "infinite_chamber", (120, 520), "overclock", "Infinite Chamber"),
@@ -4446,6 +4458,112 @@ def build_zones() -> Dict[str, Zone]:
         description="Side-quest route resolving cloister grief with a spiral-pattern guardian duel.",
     )
 
+    # Singularity Throne - finale arena
+    zones["singularity_throne"] = Zone(
+        name="singularity_throne",
+        platforms=[
+            floor_platform(100),
+            Platform(pygame.Rect(180, 520, 180, 16)),
+            Platform(pygame.Rect(420, 460, 180, 16)),
+            Platform(pygame.Rect(300, 360, 200, 12)),
+            Platform(pygame.Rect(240, 300, 140, 12), "hazard"),
+        ],
+        portals=[
+            Portal(pygame.Rect(20, 320, 60, 160), "prime_convergence", (620, 420), None, "Return to Prime Gate"),
+            Portal(
+                pygame.Rect(720, 260, 50, 180),
+                "kernel_nexus",
+                (360, 360),
+                None,
+                "Nexus Epilogue",
+                required_flag="mainframe_restored",
+            ),
+        ],
+        npcs=[
+            NPC(
+                "Prime Echo",
+                pygame.Rect(460, 420, 24, 32),
+                [
+                    DialogueLine(
+                        "At last, another echo stands before the Throne.",
+                        forbidden_flag="singularity_crown_defeated",
+                    ),
+                    DialogueLine(
+                        "Bind every choice into a single verdict; the Crown will heed you.",
+                        requires_flag="singularity_finale_active",
+                        forbidden_flag="singularity_crown_defeated",
+                    ),
+                    DialogueLine(
+                        "You sealed the fracture. Carry this calm back to those who wait.",
+                        requires_flag="mainframe_restored",
+                    ),
+                ],
+            ),
+        ],
+        collectibles=[
+            Collectible(
+                pygame.Rect(500, 360, 16, 16),
+                "Singularity Transcript",
+                "A record of the moment the Mainframe was rewritten.",
+                value=4,
+                lore_id="fragment_ac",
+            ),
+        ],
+        items=[
+            ItemDrop(
+                pygame.Rect(260, 520, 18, 18),
+                "coolant_shard",
+                "Coolant Shard",
+                "Chilled fragment that hastens Overclock recovery.",
+            ),
+        ],
+        pickups=[],
+        enemies=[
+            CorruptedProgram(pygame.Rect(220, 500, 26, 24), "phase_wisp", (200, 360)),
+            CorruptedProgram(pygame.Rect(560, 420, 26, 24), "admin_turret", (520, 680)),
+        ],
+        bosses=[BossEncounter("Singularity Crown", pygame.Rect(140, 200, 520, 340), 150, 5, pattern="halo")],
+        upgrade_terminals=[
+            UpgradeTerminal(
+                pygame.Rect(600, 520, 36, 36),
+                "singularity_resonator",
+                12,
+                "Anchor the finale: +1 integrity and corruption purge.",
+            ),
+        ],
+        save_stations=[
+            SaveStation(
+                pygame.Rect(120, 540, 42, 42),
+                "Throne Anchor",
+                "The Throne pauses reality, letting you recover.",
+                (140, 520),
+            ),
+        ],
+        events=[
+            StoryEvent(
+                pygame.Rect(260, 520, 200, 100),
+                "singularity_finale_prompt",
+                "The Throne recognises your thread. Brace to confront the Singularity Crown.",
+                requires_flag="prime_judgement_recorded",
+                grant_quest="singularity_finale",
+                set_flags=("singularity_finale_active",),
+                cinematic_id="singularity_manifest",
+            ),
+            StoryEvent(
+                pygame.Rect(360, 340, 200, 140),
+                "singularity_core_awarded",
+                "Stabilised code cascades outward, gifting you the Singularity Core.",
+                requires_flag="singularity_crown_defeated",
+                grant_item=("singularity_core", 1, "Stabilised kernel binding the restored Mainframe."),
+                set_flags=("mainframe_restored",),
+                adjust_corruption=-20,
+                reputation_changes=(("caretakers", 5), ("rebellion", 5), ("collectors", 5)),
+            ),
+        ],
+        ambience="Decision matrices spiral into a luminous throne awaiting your final verdict.",
+        description="Climactic arena where every ability is tested against the Singularity Crown.",
+    )
+
     return zones
 
 
@@ -4489,6 +4607,7 @@ class Game:
         self.decompile_count = 0
         self.debug_success_count = 0
         self.rests_taken = 0
+        self.game_complete = False
 
         self.audio = SoundscapeManager()
         self.register_soundscapes()
@@ -4534,6 +4653,7 @@ class Game:
             Soundscape("nebula_reliquary", 162.0, 6.2, 0.27, "Starlit reliquaries chime with distant futures."),
             Soundscape("tesseract_workshop", 210.0, 9.2, 0.3, "Metallic rhythms fold through recursive machinery."),
             Soundscape("processional_way", 132.0, 5.8, 0.24, "Somber choirs guide mourners along lantern-lit paths."),
+            Soundscape("singularity_throne", 320.0, 14.0, 0.36, "Finale harmonics fuse every prior motif."),
         ]
         for preset in presets:
             self.audio.register_soundscape(preset)
@@ -4568,6 +4688,7 @@ class Game:
             "fragment_z": ("Nebula Reliquary", "Starlit reliquaries archive choices waiting to be made."),
             "fragment_aa": ("Tesseract Workshop", "Engineers folded space to perfect traversal routines."),
             "fragment_ab": ("Processional Way", "Lantern bearers escort corrupted programs toward restful sleep."),
+            "fragment_ac": ("Singularity Throne", "The final verdict weaves every branch into one restored Mainframe."),
         }
         for key, value in entries.items():
             self.codex.register(key, *value)
@@ -4620,6 +4741,8 @@ class Game:
             "reliquary_seraph": ("Halo Keeper", "Calm the Reliquary Seraph."),
             "tensor_artificer": ("Vector Virtuoso", "Stabilize the Tensor Artificer."),
             "procession_warden": ("Lantern Guardian", "Guide the Procession Warden to peace."),
+            "singularity_crown": ("Crownbreaker", "Overcome the Singularity Crown at the Throne."),
+            "mainframe_restored": ("Mainframe Restored", "Seal the fracture and finish the campaign."),
         }
         for key, (title, desc) in achievements.items():
             self.achievement_tracker.register(key, title, desc)
@@ -4726,6 +4849,23 @@ class Game:
                 ],
                 requires_flag="prime_judgement_recorded",
                 forbidden_flag="cinematic_prime_reckoning_played",
+            ),
+            CinematicMoment(
+                "singularity_manifest",
+                [
+                    "A lattice of outcomes coils into a luminous throne.",
+                    "Every ally's voice resonates: 'Echo, anchor us in the path you believe in.'",
+                ],
+                requires_flag="singularity_finale_active",
+            ),
+            CinematicMoment(
+                "singularity_finale",
+                [
+                    "The Mainframe exhales. Stabilised code flows through every zone you restored.",
+                    "Companions and factions pledge to rebuild alongside your newly forged will.",
+                    "Press ESC to exit or continue exploring to witness lingering echoes.",
+                ],
+                requires_flag="mainframe_restored",
             ),
         ]
         for moment in sequences:
@@ -4871,6 +5011,13 @@ class Game:
             self.update_reputation("caretakers", 4)
             self.game_state.heal(2)
             self.game_state.adjust_corruption(-7)
+        elif quest_id == "singularity_finale":
+            self.update_reputation("caretakers", 6)
+            self.update_reputation("rebellion", 6)
+            self.update_reputation("collectors", 6)
+            self.game_state.add_fragments(6)
+            self.game_state.adjust_corruption(-20)
+            self.game_state.heal(self.game_state.max_health)
         # default quests grant no automatic reward here but may set flags elsewhere
 
     # ------------------------------------------------------------------
@@ -5005,6 +5152,8 @@ class Game:
                     self.map_overlay.mark_visited("tesseract_workshop")
                 if item.item_id == "procession_lantern":
                     self.game_state.set_flag("item_procession_lantern")
+                if item.item_id == "singularity_core":
+                    self.game_state.set_flag("singularity_core_obtained")
                 self.unlock_achievement("scavenger")
 
     def process_story_events(self):
@@ -5106,6 +5255,10 @@ class Game:
                     self.game_state.heal(2)
                     self.game_state.adjust_corruption(-5)
                     bonus_effects.append("Resolve core steadies your spirit for the final push.")
+                if "singularity_core" in self.game_state.items:
+                    self.game_state.adjust_corruption(-10)
+                    self.overclock_cooldown = 0
+                    bonus_effects.append("Singularity core radiates perfect balance across the Mainframe.")
                 if "cloister_bell" in self.game_state.items:
                     self.game_state.adjust_corruption(-4)
                     bonus_effects.append("Cloister bell song calms the cathedral within.")
@@ -5280,6 +5433,13 @@ class Game:
             self.game_state.adjust_corruption(-5)
             self.game_state.quest_flags["processional_barrier_active"] = True
             return True
+        if upgrade_id == "singularity_resonator":
+            if self.game_state.max_health < 16:
+                self.game_state.max_health += 1
+            self.game_state.health = self.game_state.max_health
+            self.game_state.adjust_corruption(-12)
+            self.overclock_cooldown_max = max(FPS * 2, int(self.overclock_cooldown_max * 0.75))
+            return True
         return False
 
     # ------------------------------------------------------------------
@@ -5402,10 +5562,30 @@ class Game:
                             achievement_id = BOSS_ACHIEVEMENTS.get(boss.name, "boss_hunter")
                             self.unlock_achievement(achievement_id)
                             self.unlock_achievement("boss_hunter")
+                            if boss.name == "Singularity Crown":
+                                self.game_state.set_flag("singularity_crown_defeated")
+                                self.trigger_finale()
 
-    # ------------------------------------------------------------------
-    # Main loop pieces
-    # ------------------------------------------------------------------
+      # ------------------------------------------------------------------
+      # Main loop pieces
+      # ------------------------------------------------------------------
+    def trigger_finale(self):
+        if self.game_complete:
+            return
+        self.game_complete = True
+        self.game_state.set_flag("mainframe_restored")
+        self.game_state.set_flag("singularity_finale_complete")
+        if "singularity_finale" not in self.quest_log.quests:
+            self.quest_log.add_quest(
+                Quest("singularity_finale", "Singularity Finale", "Stabilise the Singularity Crown."),
+            )
+        self.quest_log.complete("singularity_finale")
+        self.game_state.set_flag("singularity_finale")
+        self.reward_quest("singularity_finale")
+        self.unlock_achievement("mainframe_restored")
+        self.dialogue.show("Mainframe stabilised. Explore freely or return to the Nexus.")
+        self.start_cinematic("singularity_finale")
+
     def run(self):
         while True:
             dt = self.clock.tick(FPS)
@@ -5512,6 +5692,13 @@ class Game:
     def handle_portals(self):
         for portal in self.current_zone.portals:
             if self.player.rect.colliderect(portal.rect):
+                label = portal.label or "Portal"
+                if portal.required_flag and not self.game_state.has_flag(portal.required_flag):
+                    self.dialogue.show(f"{label} remains sealed. Resolve prerequisite routines first.")
+                    continue
+                if portal.forbidden_flag and self.game_state.has_flag(portal.forbidden_flag):
+                    self.dialogue.show(f"{label} no longer responds.")
+                    continue
                 if portal.requirement and not self.game_state.ability_active(portal.requirement):
                     self.dialogue.show(f"Access denied. Requires {portal.requirement.replace('_', ' ').title()}")
                 else:
